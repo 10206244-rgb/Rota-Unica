@@ -18,12 +18,12 @@ final class PlaceCategories {
  static String[] tags(String id){int i=Arrays.asList(IDS).indexOf(id);return i<0?new String[0]:TAGS[i].clone();}
  static String label(String id){int i=Arrays.asList(IDS).indexOf(id);return i<0?"Local":LABELS[i];}
  static String detect(String query){String q=AddressRank.normalize(query);if(q.matches("^(rua|r|avenida|av|travessa|rodovia|estrada)\\b.*"))return null;
- if(q.matches(".*\\b(prefeitura|secretaria|forum|camara municipal|inss|detran|orgao publico)\\b.*"))return "government";
- if(q.matches(".*\\b(ubs|upa|urs|uaps|caps|unidade de saude|posto de saude|centro de saude|unidade basica|unidade regional)\\b.*"))return "health";
- if(q.matches(".*\\b(hospital|hospitais)\\b.*"))return "hospital";
- if(q.matches(".*\\b(terminal|rodoviaria|estacao de trem|estacao ferroviaria)\\b.*"))return "terminal";
- if(q.matches(".*\\b(shopping|shoppings|centro comercial)\\b.*"))return "mall";
- if(q.matches(".*\\b(escola|escolas|colegio|cmei|emef|creche)\\b.*"))return "school";
+ if(q.matches(".*\\b(prefeituras?|secretaria|forum|camara municipal|inss|detran|orgao publico|city hall|town hall|ayuntamiento|municipalidad|mairie|rathaus|municipio)\\b.*"))return "government";
+ if(q.matches(".*\\b(ubs|upa|urs|uaps|caps|unidades? de saude|posto de saude|centro de saude|unidade basica|unidade regional|health cent(er|re)|clinic|clinica|centro de salud|centre de sante)\\b.*"))return "health";
+ if(q.matches(".*\\b(hospital|hospitais|hospitals|hopital)\\b.*"))return "hospital";
+ if(q.matches(".*\\b(terminais|terminal|rodoviaria|estacao de trem|estacao ferroviaria|bus station|train station|estacion de autobuses|estacion de tren|gare)\\b.*"))return "terminal";
+ if(q.matches(".*\\b(shopping|shoppings|centro comercial|mall|shopping centre|shopping center|centre commercial|einkaufszentrum)\\b.*"))return "mall";
+ if(q.matches(".*\\b(escola|escolas|colegio|cmei|emef|creche|school|escuela|ecole|schule)\\b.*"))return "school";
  if(q.matches(".*\\b(universidade|faculdade|ufes)\\b.*"))return "university";
  if(q.matches(".*\\b(delegacia|policia)\\b.*"))return "police";
  if(q.contains("bombeiro"))return "fire_station";
@@ -35,7 +35,7 @@ final class PlaceCategories {
  static boolean matches(String category,String key,String value){if(category==null)return false;for(String tag:tags(category))if(tag.equals(key+"="+value))return true;return false;}
  static boolean major(String key,String value){for(String id:new String[]{"government","health","hospital","school","terminal","mall","library","police","fire_station","social","park","airport","university"})if(matches(id,key,value))return true;return false;}
  static String namedQuery(String q,String category){String n=AddressRank.normalize(q);if(category==null)return n;String regex;
- switch(category){case "health":regex="\\b(unidade basica de saude|unidade regional de saude|unidade de saude|posto de saude|centro de saude|ubs|upa|urs|uaps|caps)\\b";break;case "government":regex="\\b(prefeitura|secretaria|camara municipal|orgao publico)\\b";break;case "terminal":regex="\\b(terminal|rodoviaria|estacao de trem|estacao ferroviaria)\\b";break;case "mall":regex="\\b(shoppings?|centro comercial)\\b";break;case "school":regex="\\b(escolas?|colegio|cmei|emef|creche)\\b";break;case "hospital":regex="\\b(hospital|hospitais)\\b";break;default:regex="\\b"+AddressRank.normalize(label(category))+"\\b";}
+ switch(category){case "health":regex="\\b(unidade basica de saude|unidade regional de saude|unidades? de saude|posto de saude|centro de saude|ubs|upa|urs|uaps|caps|health cent(er|re)|clinic|clinica|centro de salud|centre de sante)\\b";break;case "government":regex="\\b(prefeituras?|secretaria|camara municipal|orgao publico|city hall|town hall|ayuntamiento|municipalidad|mairie|rathaus|municipio)\\b";break;case "terminal":regex="\\b(terminal|rodoviaria|estacao de trem|estacao ferroviaria)\\b";break;case "mall":regex="\\b(shoppings?|centro comercial|mall|shopping centre|shopping center|centre commercial|einkaufszentrum)\\b";break;case "school":regex="\\b(escolas?|colegio|cmei|emef|creche|school|escuela|ecole|schule)\\b";break;case "hospital":regex="\\b(hospital|hospitais|hospitals|hopital)\\b";break;default:regex="\\b"+AddressRank.normalize(label(category))+"\\b";}
  return n.replaceAll(regex," ").replaceAll("\\b(de|da|do|das|dos|municipal|perto|proximo|proxima|mim)\\b"," ").replaceAll("\\s+"," ").trim();}
  static boolean matchName(String q,String category,String name,String detail){String n=namedQuery(q,category);return n.isEmpty()||AddressRank.prefixMatch(n,name+" "+detail);}
 }
