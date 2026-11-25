@@ -111,10 +111,11 @@ final class VectorNavigation {
     JSONObject line(List<GeoPoint> list,JSONObject p)throws JSONException{JSONArray c=new JSONArray();for(GeoPoint g:list)c.put(coords(g));return feature("LineString",c,p);}
     void source(String id,JSONArray f){if(!active())return;try{GeoJsonSource src=style.getSourceAs("ru-"+id);if(src!=null)src.setGeoJson(new JSONObject().put("type","FeatureCollection").put("features",f).toString());}catch(Exception ignored){}}
     void routes(){if(!active())return;JSONArray alt=new JSONArray(),chosen=new JSONArray(),dest=new JSONArray();try{
-        for(int i=0;i<a.routes.size();i++){MainActivity.Route r=a.routes.get(i);if(r.points.size()<2)continue;if(i==a.selected)chosen.put(line(r.points,props("route",i)));else if(!a.driving)alt.put(line(r.points,props("route",i)));}
+        for(int i=0;i<a.routes.size();i++){MainActivity.Route r=a.routes.get(i);if(r.points.size()<2)continue;if(i==a.selected){List<GeoPoint> remaining=a.remainingLine(r);if(remaining.size()>1)chosen.put(line(remaining,props("route",i)));}else if(!a.driving)alt.put(line(r.points,props("route",i)));}
         image("ru-dest-icon",a.mapIcon("pin",0xff087e65));if(a.destination!=null)dest.put(feature("Point",coords(a.destination.p),props("icon","ru-dest-icon","label",a.destination.name)));
         for(MainActivity.Place stop:a.stops)dest.put(feature("Point",coords(stop.p),props("icon","ru-dest-icon","label",stop.name)));
     }catch(Exception ignored){}source("alt",alt);source("route",chosen);source("dest",dest);events();}
+    void routeProgress(){if(!active()||a.routes.isEmpty())return;try{List<GeoPoint> p=a.remainingLine(a.routes.get(a.selected));JSONArray f=new JSONArray();if(p.size()>1)f.put(line(p,props("route",a.selected)));source("route",f);}catch(Exception ignored){}}
     void events(){if(!active())return;JSONArray all=new JSONArray(),radars=new JSONArray();try{
         ArrayList<MainActivity.Event> data=a.roadEvents();long now=System.currentTimeMillis();GeoPoint here=a.loc==null?null:a.gp(a.loc);MainActivity.Route activeRoute=a.driving&&!a.routes.isEmpty()?a.routes.get(a.selected):null;double from=activeRoute!=null&&here!=null?Math.max(0,a.project(here,activeRoute.points)[0]-100):0;
         for(MainActivity.Event e:data){if(e.expires<now||here==null||here.distanceToAsDouble(e.p)>40000)continue;if(activeRoute!=null&&!a.matchesRoute(e,activeRoute,from))continue;
@@ -130,7 +131,7 @@ final class VectorNavigation {
     }catch(Exception ignored){}source("points",all);source("radars",radars);}
     void pois(List<MainActivity.Place> p,String c){places=c==null?Collections.emptyList():new ArrayList<>(p);category=c;events();}
     void traffic(){if(!active())return;JSONArray f=new JSONArray();try{for(MainActivity.Jam j:a.jams){if(j.expires<System.currentTimeMillis()||j.points.size()<2)continue;String color=j.level>=5?"#991b1b":j.level>=4?"#ef4444":j.level==3?"#f97316":"#eab308";f.put(line(j.points,props("color",color)));}}catch(Exception ignored){}source("jams",f);}
-    void position(){if(!active())return;JSONArray f=new JSONArray();try{if(a.loc!=null)f.put(feature("Point",coords(a.gp(a.loc)),props("heading",a.driving&&a.followEnabled?0:(a.loc.hasBearing()?a.loc.getBearing()-(map==null?0:map.getCameraPosition().bearing):0),"label","Sua localização")));}catch(Exception ignored){}source("car",f);}
+    void position(){if(!active())return;JSONArray f=new JSONArray();try{if(a.loc!=null)f.put(feature("Point",coords(a.navigationPoint()),props("heading",a.driving&&a.followEnabled?0:(a.loc.hasBearing()?a.loc.getBearing()-(map==null?0:map.getCameraPosition().bearing):0),"label","Sua localização")));}catch(Exception ignored){}source("car",f);}
     void camera(GeoPoint p,float bearing,boolean tilt,boolean drive){
         if(!active())return;position();if(drive&&!a.followEnabled)return;
         long now=android.os.SystemClock.elapsedRealtime();
