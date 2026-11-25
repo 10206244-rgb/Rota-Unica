@@ -45,7 +45,7 @@ final class VectorNavigation {
         view.getMapAsync(m -> {
             if(destroyed)return;
             map=m;
-            map.getUiSettings().setCompassEnabled(false);map.setMaxTiltPreference(65);map.getUiSettings().setRotateGesturesEnabled(true);map.getUiSettings().setTiltGesturesEnabled(true);
+            map.getUiSettings().setCompassEnabled(false);map.setMaxPitchPreference(60);map.setPrefetchZoomDelta(3);map.getUiSettings().setRotateGesturesEnabled(true);map.getUiSettings().setTiltGesturesEnabled(true);
             map.addOnCameraMoveStartedListener(reason -> {
                 if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE && a.driving){a.followEnabled=false;lastTarget=null;}
             });
@@ -131,7 +131,7 @@ final class VectorNavigation {
         String k="fuel".equals(category)?"fuel":"bus_stop".equals(category)?"bus":"pin";String id="poi-"+k;image(id,a.mapIcon(k,0xff087e65));if(!a.driving)for(MainActivity.Place p:places)all.put(feature("Point",coords(p.p),props("icon",id,"label",p.name+" · "+p.detail)));
     }catch(Exception ignored){}source("points",all);source("radars",radars);source("bumps",bumps);}
     void pois(List<MainActivity.Place> p,String c){places=c==null?Collections.emptyList():new ArrayList<>(p);category=c;events();}
-    void traffic(){if(!active())return;JSONArray f=new JSONArray();try{for(MainActivity.Jam j:a.jams){if(j.expires<System.currentTimeMillis()||j.points.size()<2)continue;String color=j.level>=5?"#991b1b":j.level>=4?"#ef4444":j.level==3?"#f97316":"#eab308";f.put(line(j.points,props("color",color)));}}catch(Exception ignored){}source("jams",f);}
+    void traffic(){if(!active())return;JSONArray f=new JSONArray();try{for(MainActivity.Jam j:a.jams){if(j.expires<System.currentTimeMillis()||j.points.size()<2||j.level<2)continue;String color=j.level>=5?"#991b1b":j.level>=4?"#ef4444":j.level==3?"#f97316":"#eab308";f.put(line(j.points,props("color",color)));}}catch(Exception ignored){}source("jams",f);}
     void position(){if(!active())return;JSONArray f=new JSONArray();try{if(a.loc!=null){double bearing=a.driving?a.heading:a.loc.hasBearing()?a.loc.getBearing():0;double relative=bearing-(map==null?0:map.getCameraPosition().bearing);boolean pitched=a.driving&&a.tiltEnabled;int direction=SedanSprite.direction(relative);String icon="sedan-"+direction+(pitched?"-3d":"-2d");if(!installed.contains(icon))image(icon,SedanSprite.draw(a.getResources(),direction,pitched));f.put(feature("Point",coords(a.navigationPoint()),props("icon",icon,"label","Sua localização")));}}catch(Exception ignored){}source("car",f);}
     void configureBuildings(){if(style==null)return;try{boolean found=false;for(org.maplibre.android.style.layers.Layer l:style.getLayers()){if(l instanceof org.maplibre.android.style.layers.FillExtrusionLayer){l.setProperties(fillExtrusionOpacity(.78f));found=true;}}if(!found&&style.getSource("openmaptiles")!=null){org.maplibre.android.style.layers.FillExtrusionLayer l=new org.maplibre.android.style.layers.FillExtrusionLayer("ru-buildings","openmaptiles");l.setSourceLayer("building");l.setMinZoom(15.5f);l.setFilter(Expression.all(Expression.has("render_height"),Expression.has("render_min_height")));l.setProperties(fillExtrusionColor(dark?0xff43515a:0xffd7e4df),fillExtrusionHeight(Expression.get("render_height")),fillExtrusionBase(Expression.get("render_min_height")),fillExtrusionOpacity(.78f));style.addLayer(l);}}catch(Exception ignored){}}
     void camera(GeoPoint p,float bearing,boolean tilt,boolean drive){
