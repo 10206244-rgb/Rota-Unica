@@ -29,7 +29,7 @@ final class VectorNavigation {
     MapLibreMap map;
     Style style;
     boolean ready, dark, destroyed,offlineMode,offlineFailed,offlinePreparing; long lastConnectivityCheck=0; final java.util.concurrent.ExecutorService mapFiles=java.util.concurrent.Executors.newSingleThreadExecutor();
-    int generation; long lastCameraAt=0; double lastZoom=17.2,lastTilt=0; float lastBearing=0; GeoPoint lastTarget; boolean lastDrive=false; android.os.Handler ui=new android.os.Handler(android.os.Looper.getMainLooper());
+    int generation; GeoPoint lastMarker; int renderedDirection=-1; boolean renderedPitch=false; long lastCameraAt=0; double lastZoom=17.2,lastTilt=0; float lastBearing=0; GeoPoint lastTarget; boolean lastDrive=false; android.os.Handler ui=new android.os.Handler(android.os.Looper.getMainLooper());
     final Set<String> installed = new HashSet<>(); long lastEventDraw=0; int lastSprite=-1; boolean lastSpritePitch=false;
     final String EMPTY = "{\"type\":\"FeatureCollection\",\"features\":[]}";
     List<MainActivity.Place> places = Collections.emptyList();
@@ -49,7 +49,7 @@ final class VectorNavigation {
             map.addOnCameraMoveStartedListener(reason -> {
                 if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE && a.driving){a.followEnabled=false;lastTarget=null;}
             });
-            map.addOnCameraIdleListener(()->{if(active())position();});map.addOnMapClickListener(p -> {
+            map.addOnCameraIdleListener(()->{if(active()&&!a.followEnabled)position();});map.addOnMapClickListener(p -> {
                 if(!ready)return false;
                 try{
                     List<Feature> hits=map.queryRenderedFeatures(map.getProjection().toScreenLocation(p),"ru-car","ru-radars","ru-bumps","ru-points","ru-dest","ru-alt");
@@ -75,7 +75,7 @@ final class VectorNavigation {
     void checkConnectivity(){if(map==null||destroyed||a.loc==null||offlinePreparing)return;long now=android.os.SystemClock.elapsedRealtime();if(now-lastConnectivityCheck<15000)return;lastConnectivityCheck=now;boolean connected=OfflineMapPack.online(a);boolean in=OfflineMapPack.covers(a.gp(a.loc));if(!connected&&in&&!offlineMode&&!offlineFailed&&OfflineMapPack.available(a))loadOffline(a.dark);else if(connected&&offlineMode){offlineFailed=false;loadStyle(a.dark);}else if(!in&&offlineMode)loadStyle(a.dark);}
     void loadBuilder(boolean value,Style.Builder builder){
         dark=value;final int token=++generation;
-        ready=false;style=null;installed.clear();lastTarget=null;lastCameraAt=0;
+        ready=false;style=null;installed.clear();lastTarget=null;lastMarker=null;renderedDirection=-1;lastCameraAt=0;
         a.map.setVisibility(View.VISIBLE);view.setAlpha(0f);view.setVisibility(View.VISIBLE);
         ui.postDelayed(()->{if(!destroyed&&token==generation&&!ready){generation++;fallback();}},18000);map.setStyle(builder,s->{
             if(destroyed||token!=generation)return;
@@ -132,25 +132,37 @@ final class VectorNavigation {
     }catch(Exception ignored){}source("points",all);source("radars",radars);source("bumps",bumps);}
     void pois(List<MainActivity.Place> p,String c){places=c==null?Collections.emptyList():new ArrayList<>(p);category=c;events();}
     void traffic(){if(!active())return;JSONArray f=new JSONArray();try{for(MainActivity.Jam j:a.jams){if(j.expires<System.currentTimeMillis()||j.points.size()<2||j.level<2)continue;String color=j.level>=5?"#991b1b":j.level>=4?"#ef4444":j.level==3?"#f97316":"#eab308";f.put(line(j.points,props("color",color)));}}catch(Exception ignored){}source("jams",f);}
-    void position(){if(!active())return;JSONArray f=new JSONArray();try{if(a.loc!=null){double bearing=a.driving?a.heading:a.loc.hasBearing()?a.loc.getBearing():0;double relative=bearing-(map==null?0:map.getCameraPosition().bearing);boolean pitched=a.driving&&a.tiltEnabled;int direction=SedanSprite.direction(relative);String icon="sedan-"+direction+(pitched?"-3d":"-2d");if(!installed.contains(icon))image(icon,SedanSprite.draw(a.getResources(),direction,pitched));f.put(feature("Point",coords(a.navigationPoint()),props("icon",icon,"label","Sua localização")));}}catch(Exception ignored){}source("car",f);}
+    void position(){if(!active()||a.loc==null)return;NavigationMotion.Pose p=a.motion.at(android.os.SystemClock.elapsedRealtime());GeoPoint g=p==null?a.navigationPoint():new GeoPoint(p.lat,p.lon);renderCar(g,a.driving?a.heading:a.loc.hasBearing()?a.loc.getBearing():0,a.driving&&a.tiltEnabled,map.getCameraPosition().bearing);}
+    void renderCar(GeoPoint p,double heading,boolean pitched,double cameraBearing){
+        if(!active())return;int direction=SedanSprite.direction(heading-cameraBearing);
+        if(lastMarker!=null&&lastMarker.distanceToAsDouble(p)<.12&&direction==renderedDirection&&pitched==renderedPitch)return;
+        try{String icon="sedan-"+direction+(pitched?"-3d":"-2d");if(!installed.contains(icon))image(icon,SedanSprite.draw(a.getResources(),direction,pitched));JSONArray f=new JSONArray().put(feature("Point",coords(p),props("icon",icon,"label","Sua localização")));source("car",f);lastMarker=p;renderedDirection=direction;renderedPitch=pitched;}catch(Exception ignored){}
+    }
     void configureBuildings(){if(style==null)return;try{boolean found=false;for(org.maplibre.android.style.layers.Layer l:style.getLayers()){if(l instanceof org.maplibre.android.style.layers.FillExtrusionLayer){l.setProperties(fillExtrusionOpacity(.78f));found=true;}}if(!found&&style.getSource("openmaptiles")!=null){org.maplibre.android.style.layers.FillExtrusionLayer l=new org.maplibre.android.style.layers.FillExtrusionLayer("ru-buildings","openmaptiles");l.setSourceLayer("building");l.setMinZoom(15.5f);l.setFilter(Expression.all(Expression.has("render_height"),Expression.has("render_min_height")));l.setProperties(fillExtrusionColor(dark?0xff43515a:0xffd7e4df),fillExtrusionHeight(Expression.get("render_height")),fillExtrusionBase(Expression.get("render_min_height")),fillExtrusionOpacity(.78f));style.addLayer(l);}}catch(Exception ignored){}}
+    void requestFollow(float bearing,boolean tilt){/* The shared animation clock reads current heading and tilt. */}
+    void motionFrame(GeoPoint p,float bearing,boolean tilt,boolean drive){
+        if(!active())return;
+        if(!drive||!a.followEnabled){renderCar(p,bearing,drive&&tilt,map.getCameraPosition().bearing);return;}
+        long now=android.os.SystemClock.elapsedRealtime();double v=a.motion.speed(now);double kmh=Double.isFinite(v)?v*3.6:0;
+        double zoom=Math.max(16.6,17.65-kmh*.012),pitch=tilt?58-Math.min(9,kmh*.10):0;
+        boolean initial=lastTarget==null||!lastDrive;
+        double dt=initial?.04:Math.max(.016,Math.min(.25,(now-lastCameraAt)/1000.0));
+        double alpha=1-Math.exp(-dt/.24),turn=1-Math.exp(-dt/.15);
+        double oldZoom=lastZoom,oldTilt=lastTilt,oldBearing=lastBearing;
+        if(initial){lastZoom=zoom;lastTilt=pitch;lastBearing=bearing;}
+        else{lastZoom+=alpha*(zoom-lastZoom);lastTilt+=alpha*(pitch-lastTilt);lastBearing=(float)NavigationMotion.angle(lastBearing,bearing,turn);}
+        boolean changed=initial||lastTarget.distanceToAsDouble(p)>.12||Math.abs(lastZoom-oldZoom)>.002||Math.abs(lastTilt-oldTilt)>.04||Math.abs(NavigationMotion.wrap(lastBearing-oldBearing))>.12;
+        lastCameraAt=now;lastDrive=true;
+        if(changed){int h=view.getHeight();double top=Math.min(a.dp(380),h*.48),bottom=Math.min(a.dp(65),h*.08);
+            CameraPosition c=new CameraPosition.Builder().target(new LatLng(p.getLatitude(),p.getLongitude())).zoom(lastZoom).bearing(lastBearing).tilt(lastTilt).padding(new double[]{0,top,0,bottom}).build();
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(c));lastTarget=p;
+        }
+        renderCar(p,bearing,tilt,lastBearing);
+    }
     void camera(GeoPoint p,float bearing,boolean tilt,boolean drive){
-        if(!active())return;position();if(drive&&!a.followEnabled)return;
-        long now=android.os.SystemClock.elapsedRealtime();
-        double kmh=a.loc!=null&&a.loc.hasSpeed()?a.loc.getSpeed()*3.6:0;
-        boolean initial=lastTarget==null||drive!=lastDrive;
-        double desiredZoom=drive?(kmh>85?16.6:kmh>55?16.95:kmh>25?17.3:17.65):15.0;
-        double desiredTilt=drive&&tilt?(kmh>75?49:58):0;
-        if(initial){lastZoom=desiredZoom;lastTilt=desiredTilt;lastBearing=drive?bearing:0;}
-        else{lastZoom+=(desiredZoom-lastZoom)*.22;lastTilt+=(desiredTilt-lastTilt)*.30;lastBearing=(lastBearing+360+(float)(((bearing-lastBearing+540)%360-180)*.76))%360;}
-        if(!drive)lastBearing=0;
-        if(!initial&&now-lastCameraAt<180)return;
-        if(!initial&&lastTarget.distanceToAsDouble(p)<1.4&&Math.abs(((bearing-lastBearing+540)%360)-180)<1.5&&Math.abs(lastTilt-desiredTilt)<.7&&Math.abs(lastZoom-desiredZoom)<.04)return;
-        lastTarget=p;lastCameraAt=now;lastDrive=drive;
-        int h=view.getHeight();double top=drive?Math.min(a.dp(380),h*.48):0;
-        double bottom=drive?Math.min(a.dp(65),h*.08):0;
-        CameraPosition c=new CameraPosition.Builder().target(new LatLng(p.getLatitude(),p.getLongitude())).zoom(lastZoom).bearing(lastBearing).tilt(lastTilt).padding(new double[]{0,top,0,bottom}).build();
-        if(initial)map.moveCamera(CameraUpdateFactory.newCameraPosition(c));else map.easeCamera(CameraUpdateFactory.newCameraPosition(c),220);
+        if(!active())return;lastTarget=null;
+        if(drive){motionFrame(p,bearing,tilt,true);return;}
+        lastDrive=false;map.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder().target(new LatLng(p.getLatitude(),p.getLongitude())).zoom(15).bearing(0).tilt(0).padding(new double[]{0,0,0,0}).build()));renderCar(p,bearing,false,0);
     }
     void fit(List<GeoPoint> points){lastTarget=null;if(!active()||points.size()<2)return;try{LatLngBounds.Builder b=new LatLngBounds.Builder();for(GeoPoint p:points)b.include(new LatLng(p.getLatitude(),p.getLongitude()));map.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder(map.getCameraPosition()).bearing(0).tilt(0).padding(new double[]{0,0,0,0}).build()));map.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(),a.dp(35),a.dp(105),a.dp(35),a.dp(260)),650);}catch(Exception ignored){}}
     void start(){view.onStart();}
