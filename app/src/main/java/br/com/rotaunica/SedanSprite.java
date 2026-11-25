@@ -32,5 +32,5 @@ final class SedanSprite {
  for(Face f:faces){Path path=new Path();boolean first=true;for(double[] q:f.vertices){double x=q[0]*cs+q[1]*sn,along=q[1]*cs-q[0]*sn;float px=(float)(56+x*scale),py=(float)(65-along*cp*scale-q[2]*sp*scale);if(first){path.moveTo(px,py);first=false;}else path.lineTo(px,py);}path.close();p.setStyle(Paint.Style.FILL);p.setColor(f.color);c.drawPath(path,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(.65f);p.setColor(0x55213c51);c.drawPath(path,p);}
  p.setStyle(Paint.Style.FILL);b.setDensity(160);return new BitmapDrawable(res,b);
  }
- static int direction(double degrees){return ((int)Math.round(degrees/360*STEPS)%STEPS+STEPS)%STEPS;}
+ static int direction(double degrees){return NavigationRules.sedanDirection(degrees,STEPS);}
 }
