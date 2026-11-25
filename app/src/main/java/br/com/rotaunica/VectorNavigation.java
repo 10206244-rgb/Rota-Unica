@@ -83,7 +83,7 @@ final class VectorNavigation {
                 s.addLayer(new LineLayer("ru-route-border","ru-route").withProperties(lineColor(0xff075e49),lineWidth(10f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new LineLayer("ru-route","ru-route").withProperties(lineColor(0xff10b981),lineWidth(7f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new LineLayer("ru-jams","ru-jams").withProperties(lineColor(Expression.get("color")),lineWidth(6f),lineOffset(3.5f),lineCap("round"),lineJoin("round")));
-                s.addLayer(new SymbolLayer("ru-points","ru-points").withProperties(iconImage(Expression.get("icon")),iconSize(.85f),iconAllowOverlap(false),iconIgnorePlacement(false),iconPitchAlignment("viewport")));
+                s.addLayer(new SymbolLayer("ru-points","ru-points").withProperties(iconImage(Expression.get("icon")),iconSize(.9f),iconAllowOverlap(false),iconIgnorePlacement(false),iconPitchAlignment("viewport")));
                 s.addLayer(new SymbolLayer("ru-radars","ru-radars").withProperties(iconImage(Expression.get("icon")),iconSize(.85f),iconAllowOverlap(true),iconIgnorePlacement(false),iconPitchAlignment("viewport")));s.addLayer(new SymbolLayer("ru-dest","ru-dest").withProperties(iconImage(Expression.get("icon")),iconSize(1f),iconAnchor("bottom"),iconAllowOverlap(true),iconPitchAlignment("viewport")));
                 s.addLayer(new SymbolLayer("ru-car","ru-car").withProperties(iconImage("ru-car-icon"),iconSize(1.15f),iconRotate(Expression.get("heading")),iconRotationAlignment("viewport"),iconPitchAlignment("viewport"),iconAllowOverlap(true),iconIgnorePlacement(true)));
                 image("ru-car-icon",a.mapIcon("car",0xff087e65));
@@ -111,14 +111,14 @@ final class VectorNavigation {
         for(int i=0;i<a.routes.size();i++){MainActivity.Route r=a.routes.get(i);if(r.points.size()<2)continue;if(i==a.selected)chosen.put(line(r.points,props("route",i)));else if(!a.driving)alt.put(line(r.points,props("route",i)));}
         image("ru-dest-icon",a.mapIcon("pin",0xff087e65));if(a.destination!=null)dest.put(feature("Point",coords(a.destination.p),props("icon","ru-dest-icon","label",a.destination.name)));
         for(MainActivity.Place stop:a.stops)dest.put(feature("Point",coords(stop.p),props("icon","ru-dest-icon","label",stop.name)));
-    }catch(Exception ignored){}source("alt",alt);source("route",chosen);source("dest",dest);}
+    }catch(Exception ignored){}source("alt",alt);source("route",chosen);source("dest",dest);events();}
     void events(){if(!active())return;JSONArray all=new JSONArray(),radars=new JSONArray();try{
-        ArrayList<MainActivity.Event> data=new ArrayList<>(a.fixed);data.addAll(a.live);long now=System.currentTimeMillis();GeoPoint here=a.loc==null?null:a.gp(a.loc);
-        for(MainActivity.Event e:data){if(e.expires<now||here==null||here.distanceToAsDouble(e.p)>22000)continue;
+        ArrayList<MainActivity.Event> data=a.roadEvents();long now=System.currentTimeMillis();GeoPoint here=a.loc==null?null:a.gp(a.loc);
+        for(MainActivity.Event e:data){if(e.expires<now||here==null||here.distanceToAsDouble(e.p)>40000)continue;if(a.driving&&!a.routes.isEmpty()&&!a.matchesRoute(e,a.routes.get(a.selected),Math.max(0,a.project(here,a.routes.get(a.selected).points)[0]-100)))continue;
             String kind=e.kind;String id;Drawable d;
             if(kind.equals("radar")){if(e.limit>0){int n=(int)e.limit;id="radar-"+n;d=a.symbol(String.valueOf(n),0xffb91c1c);}else{id=e.label.contains("sinal")?"redcamera":"camera";d=a.mapIcon(id,0xffb91c1c);}}
             else if(kind.equals("semaforo")){id="traffic";d=a.trafficIcon();}
-            else if(kind.equals("lombada")){id="bump";d=a.mapIcon("bump",0xffd97706);}
+            else if(kind.equals("lombada")){id="bump";d=a.mapIcon("bump",0xffd97706);}else if(kind.equals("video")){id="video";d=a.mapIcon("video",0xff256d85);}
             else if(kind.equals("historico")){id="historical";d=a.mapIcon("camera",0xff64748b);}
             else{id="hazard";d=a.mapIcon("hazard",0xffd97706);}
             image(id,d);(kind.equals("radar")?radars:all).put(feature("Point",coords(e.p),props("icon",id,"label",e.label+(e.limit>0?" · "+(int)e.limit+" km/h":"")+" · "+e.source)));
