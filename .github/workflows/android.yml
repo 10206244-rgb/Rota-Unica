@@ -8,7 +8,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -24,6 +24,16 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk Rota_Unica.apk
           test -s Rota_Unica.apk
           sha256sum Rota_Unica.apk
+          ls -lh Rota_Unica.apk
+          echo "### Rota Única — tamanho do APK" >> "$GITHUB_STEP_SUMMARY"
+          du -h Rota_Unica.apk >> "$GITHUB_STEP_SUMMARY"
+          unzip -l Rota_Unica.apk | grep -E 'lib/.+\.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rota_Unica
+          path: Rota_Unica.apk
+          retention-days: 7
+ >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: Rota_Unica
