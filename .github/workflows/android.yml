@@ -32,7 +32,24 @@ jobs:
             curl -fL --retry 2 --max-time 30 "$base/estados/ES/$file.csv" -o "app/src/main/assets/equipment/ES-$file.csv"
             test -s "app/src/main/assets/equipment/ES-$file.csv"
           done
-          curl -fL --retry 2 --max-time 30 "$base/catalogo.json" -o app/src/main/assets/equipment/catalogo.json || true
+          if curl -fL --retry 2 --max-time 30 "$base/catalogo.json" -o app/src/main/assets/equipment/catalogo.json; then
+            python3 - <<'PY'
+          import concurrent.futures, json, pathlib, urllib.request
+          root=pathlib.Path("app/src/main/assets/equipment")
+          base="https://raw.githubusercontent.com/murkiriel/pardal/main/estados"
+          states=json.loads((root/"catalogo.json").read_text())["ufs"]
+          jobs=[(uf,name) for uf in states if len(uf)==2 and uf not in ("BR","ES") for name in ("radares","lombadas")]
+          def fetch(job):
+              uf,name=job
+              try:
+                  with urllib.request.urlopen(f"{base}/{uf}/{name}.csv",timeout=25) as r: data=r.read(20_000_001)
+                  if len(data)>20_000_000 or b"lat" not in data.splitlines()[0] or b"lng" not in data.splitlines()[0]: return
+                  (root/f"{uf}-{name}.csv").write_bytes(data)
+              except Exception as e: print(f"{uf}/{name}: {e}")
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool: list(pool.map(fetch,jobs))
+          print("Cadastros estaduais:", len(list(root.glob("*.csv"))))
+          PY
+          fi
           printf "%s\n" "Pardal — dados ODbL 1.0, OpenStreetMap e fontes oficiais. https://github.com/murkiriel/pardal" > app/src/main/assets/equipment/LICENSE.txt
       - name: Prepare national health index
         continue-on-error: true
