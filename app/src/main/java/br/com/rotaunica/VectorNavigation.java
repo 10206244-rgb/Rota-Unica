@@ -83,15 +83,15 @@ final class VectorNavigation {
                 style=s;hideUnrequestedPlaces();
                 for(String id:new String[]{"alt","route","jams","points","radars","dest","car"})s.addSource(new GeoJsonSource("ru-"+id,EMPTY));
                 s.addLayer(new LineLayer("ru-alt","ru-alt").withProperties(lineColor(0xff88949b),lineWidth(5f),lineCap("round"),lineJoin("round")));
-                s.addLayer(new LineLayer("ru-route-border","ru-route").withProperties(lineColor(0xff075e49),lineWidth(10f),lineCap("round"),lineJoin("round")));
-                s.addLayer(new LineLayer("ru-route","ru-route").withProperties(lineColor(0xff10b981),lineWidth(7f),lineCap("round"),lineJoin("round")));
+                s.addLayer(new LineLayer("ru-route-border","ru-route").withProperties(lineColor(0xff075e49),lineWidth(13f),lineCap("round"),lineJoin("round")));
+                s.addLayer(new LineLayer("ru-route","ru-route").withProperties(lineColor(0xff10b981),lineWidth(9f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new LineLayer("ru-jams","ru-jams").withProperties(lineColor(Expression.get("color")),lineWidth(6f),lineOffset(3.5f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new SymbolLayer("ru-points","ru-points").withProperties(iconImage(Expression.get("icon")),iconSize(.9f),iconAllowOverlap(true),iconIgnorePlacement(false),iconPitchAlignment("viewport")));
                 s.addLayer(new SymbolLayer("ru-radars","ru-radars").withProperties(iconImage(Expression.get("icon")),iconSize(.85f),iconAllowOverlap(true),iconIgnorePlacement(false),iconPitchAlignment("viewport")));s.addLayer(new SymbolLayer("ru-dest","ru-dest").withProperties(iconImage(Expression.get("icon")),iconSize(1f),iconAnchor("bottom"),iconAllowOverlap(true),iconPitchAlignment("viewport")));
-                s.addLayer(new SymbolLayer("ru-car","ru-car").withProperties(iconImage("ru-car-icon"),iconSize(1.15f),iconRotate(Expression.get("heading")),iconRotationAlignment("viewport"),iconPitchAlignment("viewport"),iconAllowOverlap(true),iconIgnorePlacement(true)));
+                s.addLayer(new SymbolLayer("ru-car","ru-car").withProperties(iconImage("ru-car-icon"),iconSize(1.25f),iconRotate(Expression.get("heading")),iconRotationAlignment("viewport"),iconPitchAlignment("viewport"),iconAllowOverlap(true),iconIgnorePlacement(true)));
                 image("ru-car-icon",a.mapIcon("car",0xff087e65));
                 ready=true;routes();events();traffic();position();
-                if(a.driving&&a.loc!=null)camera(a.gp(a.loc),a.heading,a.tiltEnabled,true);
+                if(a.driving&&a.loc!=null)camera(a.navigationPoint(),a.heading,a.tiltEnabled,true);
                 else if(!a.routes.isEmpty())fit(a.routes.get(a.selected).points);
                 else if(a.loc!=null)camera(a.gp(a.loc),0,false,false);
                 else map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(-15.5,-49),4));
@@ -124,9 +124,9 @@ final class VectorNavigation {
             if(kind.equals("radar")){if(e.limit>0){int n=(int)e.limit;id="radar-"+n;d=a.symbol(String.valueOf(n),0xffb91c1c);}else{id=e.label.contains("sinal")?"redcamera":"camera";d=a.mapIcon(id,0xffb91c1c);}}
             else if(kind.equals("semaforo")){id="traffic";d=a.trafficIcon();}
             else if(kind.equals("lombada")){id="bump";d=a.mapIcon("bump",0xffd97706);}else if(kind.equals("video")){id="video";d=a.mapIcon("video",0xff256d85);}
-            else if(kind.equals("historico")){id="historical";d=a.mapIcon("camera",0xff64748b);}
+            else if(kind.equals("historico")){id="historical";d=a.mapIcon("camera",0xff64748b);}else if(kind.equals("transito")){id="jam-alert";d=a.mapIcon("jam",0xffdc5726);}
             else{id="hazard";d=a.mapIcon("hazard",0xffd97706);}
-            image(id,d);(kind.equals("radar")?radars:all).put(feature("Point",coords(e.p),props("icon",id,"label",e.label+(e.limit>0?" · "+(int)e.limit+" km/h":"")+" · "+e.source)));
+            image(id,d);(kind.equals("radar")||kind.equals("historico")||kind.equals("lombada")||kind.equals("video")?radars:all).put(feature("Point",coords(e.p),props("icon",id,"label",e.label+(e.limit>0?" · "+(int)e.limit+" km/h":"")+" · "+e.source)));
         }
         String k="fuel".equals(category)?"fuel":"bus_stop".equals(category)?"bus":"pin";String id="poi-"+k;image(id,a.mapIcon(k,0xff087e65));if(!a.driving)for(MainActivity.Place p:places)all.put(feature("Point",coords(p.p),props("icon",id,"label",p.name+" · "+p.detail)));
     }catch(Exception ignored){}source("points",all);source("radars",radars);}
@@ -138,8 +138,8 @@ final class VectorNavigation {
         long now=android.os.SystemClock.elapsedRealtime();
         double kmh=a.loc!=null&&a.loc.hasSpeed()?a.loc.getSpeed()*3.6:0;
         boolean initial=lastTarget==null||drive!=lastDrive;
-        double desiredZoom=drive?(kmh>85?16.3:kmh>55?16.8:kmh>25?17.15:17.55):15.0;
-        double desiredTilt=drive&&tilt?(kmh>75?34:40):0;
+        double desiredZoom=drive?(kmh>85?16.9:kmh>55?17.25:kmh>25?17.7:18.0):15.0;
+        double desiredTilt=drive&&tilt?(kmh>75?36:43):0;
         if(initial){lastZoom=desiredZoom;lastTilt=desiredTilt;lastBearing=drive?bearing:0;}
         else{lastZoom+=(desiredZoom-lastZoom)*.22;lastTilt+=(desiredTilt-lastTilt)*.30;lastBearing=(lastBearing+360+(float)(((bearing-lastBearing+540)%360-180)*.76))%360;}
         if(!drive)lastBearing=0;
