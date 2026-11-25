@@ -18,12 +18,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+      - name: Prepare offline map of Espírito Santo
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/offline/recursos
+          base='https://github.com/murkiriel/carcara/releases/download/2026-11-22-4b152427'
+          curl -fL --retry 3 --max-time 300 "$base/carcara-ES-leve.pmtiles" -o app/src/main/assets/offline/carcara-ES-leve.pmtiles
+          echo 'f1c74c74658ba0e790e157e964d7a84e96150511ed204596b11c61742b96d26a  app/src/main/assets/offline/carcara-ES-leve.pmtiles' | sha256sum -c -
+          curl -fL --retry 3 --max-time 180 "$base/carcara-recursos.tar.gz" -o /tmp/carcara-recursos.tar.gz
+          echo '2c96f4186eb606e35ee25e0e31317916e4a860e201f0f4ae91a3bb4fb8fbaf1e  /tmp/carcara-recursos.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/carcara-recursos.tar.gz -C app/src/main/assets/offline/recursos
+          test -s app/src/main/assets/offline/recursos/styles/light.json
+          test -s app/src/main/assets/offline/recursos/styles/dark.json
+          curl -fL --retry 3 "$base/LICENCA-DADOS.txt" -o app/src/main/assets/offline/LICENCA-DADOS.txt
       - name: Compile and verify
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
           cp app/build/outputs/apk/debug/app-debug.apk Rota_Unica.apk
           test -s Rota_Unica.apk
+          test "$(stat -c%s Rota_Unica.apk)" -ge 100000000
+          unzip -l Rota_Unica.apk | grep 'assets/offline/carcara-ES-leve.pmtiles'
           unzip -tq Rota_Unica.apk
           sha256sum Rota_Unica.apk
           ls -lh Rota_Unica.apk
