@@ -20,20 +20,16 @@ jobs:
           gradle-version: '8.7'
       - name: Compile and verify
         run: |
+          set -euo pipefail
           gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
           cp app/build/outputs/apk/debug/app-debug.apk Rota_Unica.apk
           test -s Rota_Unica.apk
+          unzip -tq Rota_Unica.apk
           sha256sum Rota_Unica.apk
           ls -lh Rota_Unica.apk
           echo "### Rota Única — tamanho do APK" >> "$GITHUB_STEP_SUMMARY"
           du -h Rota_Unica.apk >> "$GITHUB_STEP_SUMMARY"
-          unzip -l Rota_Unica.apk | grep -E 'lib/.+\.so
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Rota_Unica
-          path: Rota_Unica.apk
-          retention-days: 7
- >> "$GITHUB_STEP_SUMMARY"
+          unzip -l Rota_Unica.apk | grep -E 'lib/.+[.]so$' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: Rota_Unica
