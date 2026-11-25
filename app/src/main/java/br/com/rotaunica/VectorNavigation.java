@@ -45,6 +45,7 @@ final class VectorNavigation {
         view.getMapAsync(m -> {
             if(destroyed)return;
             map=m;
+            try{view.setMaximumFps(60);}catch(Exception ignored){}
             map.getUiSettings().setCompassEnabled(false);map.setMaxPitchPreference(60);map.setPrefetchZoomDelta(3);map.getUiSettings().setRotateGesturesEnabled(true);map.getUiSettings().setTiltGesturesEnabled(true);
             map.addOnCameraMoveStartedListener(reason -> {
                 if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE && a.driving){a.followEnabled=false;lastTarget=null;}
@@ -140,13 +141,14 @@ final class VectorNavigation {
     }
     void configureBuildings(){if(style==null)return;try{boolean found=false;for(org.maplibre.android.style.layers.Layer l:style.getLayers()){if(l instanceof org.maplibre.android.style.layers.FillExtrusionLayer){l.setProperties(fillExtrusionOpacity(.78f));found=true;}}if(!found&&style.getSource("openmaptiles")!=null){org.maplibre.android.style.layers.FillExtrusionLayer l=new org.maplibre.android.style.layers.FillExtrusionLayer("ru-buildings","openmaptiles");l.setSourceLayer("building");l.setMinZoom(15.5f);l.setFilter(Expression.all(Expression.has("render_height"),Expression.has("render_min_height")));l.setProperties(fillExtrusionColor(dark?0xff43515a:0xffd7e4df),fillExtrusionHeight(Expression.get("render_height")),fillExtrusionBase(Expression.get("render_min_height")),fillExtrusionOpacity(.78f));style.addLayer(l);}}catch(Exception ignored){}}
     void requestFollow(float bearing,boolean tilt){/* The shared animation clock reads current heading and tilt. */}
+    int appliedFps=60;
     void motionFrame(GeoPoint p,float bearing,boolean tilt,boolean drive){
-        if(!active())return;
+        if(!active())return;if(appliedFps!=a.frameBudget){try{view.setMaximumFps(a.frameBudget);appliedFps=a.frameBudget;}catch(Exception ignored){}}
         if(!drive||!a.followEnabled){renderCar(p,bearing,drive&&tilt,map.getCameraPosition().bearing);return;}
         long now=android.os.SystemClock.elapsedRealtime();double v=a.motion.speed(now);double kmh=Double.isFinite(v)?v*3.6:0;
         double zoom=Math.max(16.6,17.65-kmh*.012),pitch=tilt?58-Math.min(9,kmh*.10):0;
         boolean initial=lastTarget==null||!lastDrive;
-        double dt=initial?.04:Math.max(.016,Math.min(.25,(now-lastCameraAt)/1000.0));
+        double dt=initial?.016:Math.max(.008,Math.min(.25,(now-lastCameraAt)/1000.0));
         double alpha=1-Math.exp(-dt/.24),turn=1-Math.exp(-dt/.15);
         double oldZoom=lastZoom,oldTilt=lastTilt,oldBearing=lastBearing;
         if(initial){lastZoom=zoom;lastTilt=pitch;lastBearing=bearing;}
