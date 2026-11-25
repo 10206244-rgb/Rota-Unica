@@ -6,8 +6,8 @@ android {
   applicationId 'br.com.rotaunica'
   minSdk 24
   targetSdk 34
-  versionCode 7
-  versionName '0.7-street-navigation'
+  versionCode 8
+  versionName '0.8-perspective-navigation'
  }
  androidResources { noCompress += ['pmtiles'] }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
