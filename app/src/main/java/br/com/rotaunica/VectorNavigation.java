@@ -28,7 +28,7 @@ final class VectorNavigation {
     final MapView view;
     MapLibreMap map;
     Style style;
-    boolean ready, dark, destroyed;
+    boolean ready, dark, destroyed,offlineMode,offlineFailed,offlinePreparing; long lastConnectivityCheck=0; final java.util.concurrent.ExecutorService mapFiles=java.util.concurrent.Executors.newSingleThreadExecutor();
     int generation; long lastCameraAt=0; double lastZoom=17.2,lastTilt=0; float lastBearing=0; GeoPoint lastTarget; boolean lastDrive=false; android.os.Handler ui=new android.os.Handler(android.os.Looper.getMainLooper());
     final Set<String> installed = new HashSet<>();
     final String EMPTY = "{\"type\":\"FeatureCollection\",\"features\":[]}";
@@ -67,14 +67,17 @@ final class VectorNavigation {
             loadStyle(a.dark);
         });
     }
-    void fallback(){if(destroyed)return;ready=false;style=null;view.setVisibility(View.INVISIBLE);a.map.setVisibility(View.VISIBLE);a.map.setRotationX(0);a.map.setScaleX(1);a.map.setScaleY(1);a.drawEvents();a.drawJams();if(a.loc!=null&&a.driving)a.followCamera(a.loc);}
+    void fallback(){if(destroyed)return;ready=false;style=null;view.setVisibility(View.INVISIBLE);a.map.setVisibility(View.VISIBLE);a.map.setRotationX(0);a.map.setScaleX(1);a.map.setScaleY(1);if(offlineMode){offlineMode=false;offlineFailed=true;}else if(!offlineFailed&&!offlinePreparing&&a.loc!=null&&OfflineMapPack.covers(a.gp(a.loc))&&OfflineMapPack.available(a)){loadOffline(a.dark);return;}a.drawEvents();a.drawJams();if(a.loc!=null&&a.driving)a.followCamera(a.loc);}
     boolean active(){return ready&&!destroyed;}
-    void setTheme(boolean value){if(map!=null&&(style==null||dark!=value))loadStyle(value);}
-    void loadStyle(boolean value){
+    void setTheme(boolean value){if(map!=null&&(style==null||dark!=value)){if(offlineMode&&!offlineFailed)loadOffline(value);else loadStyle(value);}}
+    void loadStyle(boolean value){offlineMode=false;offlinePreparing=false;loadBuilder(value,new Style.Builder().fromUri(value?"https://tiles.openfreemap.org/styles/fiord":"https://tiles.openfreemap.org/styles/liberty"));}
+    void loadOffline(boolean value){if(map==null||destroyed||offlinePreparing)return;offlinePreparing=true;ready=false;int token=++generation;mapFiles.execute(()->{try{String json=OfflineMapPack.style(a,value);ui.post(()->{if(destroyed||token!=generation)return;offlinePreparing=false;offlineMode=true;loadBuilder(value,new Style.Builder().fromJson(json));});}catch(Exception e){ui.post(()->{if(destroyed||token!=generation)return;offlinePreparing=false;offlineFailed=true;fallback();});}});}
+    void checkConnectivity(){if(map==null||destroyed||a.loc==null||offlinePreparing)return;long now=android.os.SystemClock.elapsedRealtime();if(now-lastConnectivityCheck<15000)return;lastConnectivityCheck=now;boolean connected=OfflineMapPack.online(a);boolean in=OfflineMapPack.covers(a.gp(a.loc));if(!connected&&in&&!offlineMode&&!offlineFailed&&OfflineMapPack.available(a))loadOffline(a.dark);else if(connected&&offlineMode){offlineFailed=false;loadStyle(a.dark);}else if(!in&&offlineMode)loadStyle(a.dark);}
+    void loadBuilder(boolean value,Style.Builder builder){
         dark=value;final int token=++generation;
         ready=false;style=null;installed.clear();lastTarget=null;lastCameraAt=0;
         a.map.setVisibility(View.VISIBLE);view.setAlpha(0f);view.setVisibility(View.VISIBLE);
-        ui.postDelayed(()->{if(!destroyed&&token==generation&&!ready){generation++;fallback();}},18000);map.setStyle(new Style.Builder().fromUri(value?"https://tiles.openfreemap.org/styles/fiord":"https://tiles.openfreemap.org/styles/liberty"),s->{
+        ui.postDelayed(()->{if(!destroyed&&token==generation&&!ready){generation++;fallback();}},18000);map.setStyle(builder,s->{
             if(destroyed||token!=generation)return;
             try{
                 style=s;
@@ -113,8 +116,8 @@ final class VectorNavigation {
         for(MainActivity.Place stop:a.stops)dest.put(feature("Point",coords(stop.p),props("icon","ru-dest-icon","label",stop.name)));
     }catch(Exception ignored){}source("alt",alt);source("route",chosen);source("dest",dest);events();}
     void events(){if(!active())return;JSONArray all=new JSONArray(),radars=new JSONArray();try{
-        ArrayList<MainActivity.Event> data=a.roadEvents();long now=System.currentTimeMillis();GeoPoint here=a.loc==null?null:a.gp(a.loc);
-        for(MainActivity.Event e:data){if(e.expires<now||here==null||here.distanceToAsDouble(e.p)>40000)continue;if(a.driving&&!a.routes.isEmpty()&&!a.matchesRoute(e,a.routes.get(a.selected),Math.max(0,a.project(here,a.routes.get(a.selected).points)[0]-100)))continue;
+        ArrayList<MainActivity.Event> data=a.roadEvents();long now=System.currentTimeMillis();GeoPoint here=a.loc==null?null:a.gp(a.loc);MainActivity.Route activeRoute=a.driving&&!a.routes.isEmpty()?a.routes.get(a.selected):null;double from=activeRoute!=null&&here!=null?Math.max(0,a.project(here,activeRoute.points)[0]-100):0;
+        for(MainActivity.Event e:data){if(e.expires<now||here==null||here.distanceToAsDouble(e.p)>40000)continue;if(activeRoute!=null&&!a.matchesRoute(e,activeRoute,from))continue;
             String kind=e.kind;String id;Drawable d;
             if(kind.equals("radar")){if(e.limit>0){int n=(int)e.limit;id="radar-"+n;d=a.symbol(String.valueOf(n),0xffb91c1c);}else{id=e.label.contains("sinal")?"redcamera":"camera";d=a.mapIcon(id,0xffb91c1c);}}
             else if(kind.equals("semaforo")){id="traffic";d=a.trafficIcon();}
@@ -153,5 +156,5 @@ final class VectorNavigation {
     void stop(){view.onStop();}
     void save(Bundle state){view.onSaveInstanceState(state);}
     void lowMemory(){view.onLowMemory();}
-    void destroy(){destroyed=true;ui.removeCallbacksAndMessages(null);view.onDestroy();}
+    void destroy(){destroyed=true;ui.removeCallbacksAndMessages(null);mapFiles.shutdownNow();view.onDestroy();}
 }
