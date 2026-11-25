@@ -13,7 +13,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,7 +32,17 @@ jobs:
             curl -fL --retry 2 --max-time 30 "$base/estados/ES/$file.csv" -o "app/src/main/assets/equipment/ES-$file.csv"
             test -s "app/src/main/assets/equipment/ES-$file.csv"
           done
+          curl -fL --retry 2 --max-time 30 "$base/catalogo.json" -o app/src/main/assets/equipment/catalogo.json || true
           printf "%s\n" "Pardal — dados ODbL 1.0, OpenStreetMap e fontes oficiais. https://github.com/murkiriel/pardal" > app/src/main/assets/equipment/LICENSE.txt
+      - name: Prepare national health index
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user ijson
+          curl -fL --retry 2 --max-time 240 'https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/CNES/cnes_estabelecimentos_json.zip' -o /tmp/cnes.zip
+          curl -fL --retry 2 --max-time 60 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios' -o /tmp/municipios.json
+          python3 scripts/build_health_index.py /tmp/cnes.zip app/src/main/assets/national/cnes.sqlite /tmp/municipios.json
+          echo "CNES nacional incluído" >> "$GITHUB_STEP_SUMMARY"
       - name: Prepare offline map of Espírito Santo
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.offline_es }}
         run: |
