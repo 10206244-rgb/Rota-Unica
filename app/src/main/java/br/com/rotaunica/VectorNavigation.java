@@ -38,7 +38,7 @@ final class VectorNavigation {
         this.a=a;
         MapLibre.getInstance(a);
         view=new MapView(a,new MapLibreMapOptions().textureMode(true));
-        view.setVisibility(View.INVISIBLE);
+        view.setAlpha(0f);
         root.addView(view,1,new FrameLayout.LayoutParams(-1,-1));
         view.onCreate(state);
         view.addOnDidFailLoadingMapListener(error -> fallback());
@@ -52,7 +52,7 @@ final class VectorNavigation {
             map.addOnMapClickListener(p -> {
                 if(!ready)return false;
                 try{
-                    List<Feature> hits=map.queryRenderedFeatures(map.getProjection().toScreenLocation(p),"ru-car","ru-points","ru-dest","ru-alt");
+                    List<Feature> hits=map.queryRenderedFeatures(map.getProjection().toScreenLocation(p),"ru-car","ru-radars","ru-points","ru-dest","ru-alt");
                     if(!hits.isEmpty()){
                         Feature f=hits.get(0);
                         if(f.hasProperty("route")&&!a.driving){
@@ -67,24 +67,24 @@ final class VectorNavigation {
             loadStyle(a.dark);
         });
     }
-    void fallback(){if(destroyed)return;ready=false;style=null;view.setVisibility(View.INVISIBLE);a.map.setVisibility(View.VISIBLE);}
+    void fallback(){if(destroyed)return;ready=false;style=null;view.setVisibility(View.INVISIBLE);a.map.setVisibility(View.VISIBLE);a.drawEvents();a.drawJams();}
     boolean active(){return ready&&!destroyed;}
     void setTheme(boolean value){if(map!=null&&(style==null||dark!=value))loadStyle(value);}
     void loadStyle(boolean value){
         dark=value;final int token=++generation;
         ready=false;style=null;installed.clear();
-        a.map.setVisibility(View.VISIBLE);view.setVisibility(View.INVISIBLE);
+        a.map.setVisibility(View.VISIBLE);view.setAlpha(0f);view.setVisibility(View.VISIBLE);
         map.setStyle(new Style.Builder().fromUri(value?"https://tiles.openfreemap.org/styles/fiord":"https://tiles.openfreemap.org/styles/liberty"),s->{
             if(destroyed||token!=generation)return;
             try{
                 style=s;
-                for(String id:new String[]{"alt","route","jams","points","dest","car"})s.addSource(new GeoJsonSource("ru-"+id,EMPTY));
+                for(String id:new String[]{"alt","route","jams","points","radars","dest","car"})s.addSource(new GeoJsonSource("ru-"+id,EMPTY));
                 s.addLayer(new LineLayer("ru-alt","ru-alt").withProperties(lineColor(0xff88949b),lineWidth(5f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new LineLayer("ru-route-border","ru-route").withProperties(lineColor(0xff075e49),lineWidth(10f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new LineLayer("ru-route","ru-route").withProperties(lineColor(0xff10b981),lineWidth(7f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new LineLayer("ru-jams","ru-jams").withProperties(lineColor(Expression.get("color")),lineWidth(5f),lineCap("round"),lineJoin("round")));
                 s.addLayer(new SymbolLayer("ru-points","ru-points").withProperties(iconImage(Expression.get("icon")),iconSize(.85f),iconAllowOverlap(false),iconIgnorePlacement(false),iconPitchAlignment("viewport")));
-                s.addLayer(new SymbolLayer("ru-dest","ru-dest").withProperties(iconImage(Expression.get("icon")),iconSize(1f),iconAnchor("bottom"),iconAllowOverlap(true),iconPitchAlignment("viewport")));
+                s.addLayer(new SymbolLayer("ru-radars","ru-radars").withProperties(iconImage(Expression.get("icon")),iconSize(.85f),iconAllowOverlap(true),iconIgnorePlacement(false),iconPitchAlignment("viewport")));s.addLayer(new SymbolLayer("ru-dest","ru-dest").withProperties(iconImage(Expression.get("icon")),iconSize(1f),iconAnchor("bottom"),iconAllowOverlap(true),iconPitchAlignment("viewport")));
                 s.addLayer(new SymbolLayer("ru-car","ru-car").withProperties(iconImage("ru-car-icon"),iconSize(1.15f),iconRotate(Expression.get("heading")),iconRotationAlignment("map"),iconPitchAlignment("viewport"),iconAllowOverlap(true),iconIgnorePlacement(true)));
                 image("ru-car-icon",a.mapIcon("car",0xff087e65));
                 ready=true;routes();events();traffic();position();
@@ -92,7 +92,7 @@ final class VectorNavigation {
                 else if(!a.routes.isEmpty())fit(a.routes.get(a.selected).points);
                 else if(a.loc!=null)camera(a.gp(a.loc),0,false,false);
                 else map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(-15.5,-49),4));
-                view.setVisibility(View.VISIBLE);a.map.setVisibility(View.INVISIBLE);
+                view.setAlpha(1f);view.setVisibility(View.VISIBLE);a.map.setVisibility(View.INVISIBLE);
             }catch(Exception ex){fallback();}
         });
     }
@@ -112,7 +112,7 @@ final class VectorNavigation {
         image("ru-dest-icon",a.mapIcon("pin",0xff087e65));if(a.destination!=null)dest.put(feature("Point",coords(a.destination.p),props("icon","ru-dest-icon","label",a.destination.name)));
         for(MainActivity.Place stop:a.stops)dest.put(feature("Point",coords(stop.p),props("icon","ru-dest-icon","label",stop.name)));
     }catch(Exception ignored){}source("alt",alt);source("route",chosen);source("dest",dest);}
-    void events(){if(!active())return;JSONArray all=new JSONArray();try{
+    void events(){if(!active())return;JSONArray all=new JSONArray(),radars=new JSONArray();try{
         ArrayList<MainActivity.Event> data=new ArrayList<>(a.fixed);data.addAll(a.live);long now=System.currentTimeMillis();GeoPoint here=a.loc==null?null:a.gp(a.loc);
         for(MainActivity.Event e:data){if(e.expires<now||here==null||here.distanceToAsDouble(e.p)>22000)continue;
             String kind=e.kind;String id;Drawable d;
@@ -121,15 +121,15 @@ final class VectorNavigation {
             else if(kind.equals("lombada")){id="bump";d=a.mapIcon("bump",0xffd97706);}
             else if(kind.equals("historico")){id="historical";d=a.mapIcon("camera",0xff64748b);}
             else{id="hazard";d=a.mapIcon("hazard",0xffd97706);}
-            image(id,d);all.put(feature("Point",coords(e.p),props("icon",id,"label",e.label+(e.limit>0?" · "+(int)e.limit+" km/h":"")+" · "+e.source)));
+            image(id,d);(kind.equals("radar")?radars:all).put(feature("Point",coords(e.p),props("icon",id,"label",e.label+(e.limit>0?" · "+(int)e.limit+" km/h":"")+" · "+e.source)));
         }
         String k="fuel".equals(category)?"fuel":"bus_stop".equals(category)?"bus":"pin";String id="poi-"+k;image(id,a.mapIcon(k,0xff087e65));for(MainActivity.Place p:places)all.put(feature("Point",coords(p.p),props("icon",id,"label",p.name+" · "+p.detail)));
-    }catch(Exception ignored){}source("points",all);}
+    }catch(Exception ignored){}source("points",all);source("radars",radars);}
     void pois(List<MainActivity.Place> p,String c){places=c==null?Collections.emptyList():new ArrayList<>(p);category=c;events();}
     void traffic(){if(!active())return;JSONArray f=new JSONArray();try{for(MainActivity.Jam j:a.jams){if(j.expires<System.currentTimeMillis()||j.points.size()<2)continue;String color=j.level>=5?"#991b1b":j.level>=4?"#ef4444":j.level==3?"#f97316":"#eab308";f.put(line(j.points,props("color",color)));}}catch(Exception ignored){}source("jams",f);}
     void position(){if(!active())return;JSONArray f=new JSONArray();try{if(a.loc!=null)f.put(feature("Point",coords(a.gp(a.loc)),props("heading",a.driving?a.heading:0,"label","Sua localização")));}catch(Exception ignored){}source("car",f);}
     void camera(GeoPoint p,float bearing,boolean tilt,boolean drive){if(!active())return;position();if(drive&&!a.followEnabled)return;
-        double[] padding=drive?new double[]{0,a.dp(110),0,a.dp(320)}:new double[]{0,0,0,0};
+        double[] padding=drive?new double[]{0,Math.min(a.dp(300),view.getHeight()*.38),0,a.dp(110)}:new double[]{0,0,0,0};
         CameraPosition c=new CameraPosition.Builder().target(new LatLng(p.getLatitude(),p.getLongitude())).zoom(drive?17.4:15).bearing(drive?bearing:0).tilt(drive&&tilt?48:0).padding(padding).build();
         map.easeCamera(CameraUpdateFactory.newCameraPosition(c),550);
     }
