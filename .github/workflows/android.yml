@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      offline_es:
+        description: "Incluir mapa offline do Espírito Santo (125 MB)"
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -18,7 +23,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+      - name: Bundle immediate equipment data
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/equipment
+          base=https://raw.githubusercontent.com/murkiriel/pardal/main
+          for file in radares lombadas; do
+            curl -fL --retry 2 --max-time 30 "$base/estados/ES/$file.csv" -o "app/src/main/assets/equipment/ES-$file.csv"
+            test -s "app/src/main/assets/equipment/ES-$file.csv"
+          done
+          printf "%s\n" "Pardal — dados ODbL 1.0, OpenStreetMap e fontes oficiais. https://github.com/murkiriel/pardal" > app/src/main/assets/equipment/LICENSE.txt
       - name: Prepare offline map of Espírito Santo
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.offline_es }}
         run: |
           set -euo pipefail
           mkdir -p app/src/main/assets/offline/recursos
@@ -37,8 +53,7 @@ jobs:
           gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
           cp app/build/outputs/apk/debug/app-debug.apk Rota_Unica.apk
           test -s Rota_Unica.apk
-          test "$(stat -c%s Rota_Unica.apk)" -ge 100000000
-          unzip -l Rota_Unica.apk | grep 'assets/offline/carcara-ES-leve.pmtiles'
+          unzip -l Rota_Unica.apk | grep "assets/equipment/ES-radares.csv"
           unzip -tq Rota_Unica.apk
           sha256sum Rota_Unica.apk
           ls -lh Rota_Unica.apk
